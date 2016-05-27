@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"github.com/gorilla/mux"
 
+	"io/ioutil"
 )
 
 func GetAllNews(w http.ResponseWriter, req *http.Request) {
@@ -19,6 +20,17 @@ func GetNews(w http.ResponseWriter, req *http.Request) {
 }
 func PostNews(w http.ResponseWriter, req *http.Request){
 	w.Write([]byte("Welcome to HELLo"))
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	//validate input
 	//send request to database
 
@@ -27,6 +39,16 @@ func PostNews(w http.ResponseWriter, req *http.Request){
 func PutNews(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	w.Write([]byte(vars["id"]))
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	//validate input
 	//validate input id matches with id
 	//send request to database
