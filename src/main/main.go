@@ -1,12 +1,12 @@
 package main
 
 import (
-	"net/http"
+	//"net/http"
 	"main/routes"
 
 	//"encoding/json"
 	//"main/controller"
-	"github.com/gorilla/mux"
+	//"github.com/gorilla/mux"
 )
 
 //type stuff []news
