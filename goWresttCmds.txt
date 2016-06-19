@@ -1,0 +1,3 @@
+curl --request GET 'localhost:8080/news'
+curl --request GET 'localhost:8080/news/1'
+curl -H "Content-Type: application/json" -X POST -d '{"title":"hello", "body": "moon hahaha"}' localhost:8080/news

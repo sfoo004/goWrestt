@@ -23,7 +23,7 @@ type news struct {
 func GetAllNews(res http.ResponseWriter, req *http.Request) {
 	fmt.Println("GET ALL NEWS")
 	//send request to database
-	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news")
+	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB")
 	if( e != nil){
 		fmt.Print(e)
 	}
@@ -84,7 +84,7 @@ func GetNews(res http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	res.Write([]byte(vars["id"]))
 	//send request to database
-	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news")
+	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB")
 	if( e != nil){
 		fmt.Print(e)
 	}
@@ -152,7 +152,7 @@ func PostNews(res http.ResponseWriter, req *http.Request){
 	}
 	n.CreatedAt = time.Now()
 	//send request to database
-	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news")
+	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB")
 	if( e != nil){
 		fmt.Print(e)
 	}
