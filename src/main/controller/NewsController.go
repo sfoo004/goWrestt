@@ -4,13 +4,12 @@ import (
 	"net/http"
 	"github.com/gorilla/mux"
 	_ "github.com/go-sql-driver/mysql"
-	//"io/ioutil"
 	"database/sql"
 	"fmt"
 	"encoding/json"
-	//"strconv"
 	"log"
 	"time"
+	"strconv"
 )
 
 type news struct {
@@ -23,7 +22,7 @@ type news struct {
 func GetAllNews(res http.ResponseWriter, req *http.Request) {
 	fmt.Println("GET ALL NEWS")
 	//send request to database
-	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB")
+	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
 	if( e != nil){
 		fmt.Print(e)
 	}
@@ -80,65 +79,49 @@ func GetAllNews(res http.ResponseWriter, req *http.Request) {
 }
 
 func GetNews(res http.ResponseWriter, req *http.Request) {
-	fmt.Println("GET NEWS")
-	vars := mux.Vars(req)
-	res.Write([]byte(vars["id"]))
-	//send request to database
-	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB")
-	if( e != nil){
-		fmt.Print(e)
-	}
-
 	//set mime type to JSON
 	res.Header().Set("Content-type", "application/json")
 
-	err := req.ParseForm()
+	fmt.Println("GET NEWS")
+
+	vars := mux.Vars(req)
+	var n news
+	//gets id from url
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		fmt.Print(err)
+	}
+
+	//send request to database
+	db, err := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
+	if( err != nil){
+		fmt.Print(err)
+	}
+
 	if err != nil {
 		http.Error(res, fmt.Sprintf("error parsing url %v", err), 500)
 	}
+	// will Query the news and find it by the id
+	response, err := db.Query("SELECT * FROM news WHERE id= ? ", id)
 
-	//can't define dynamic slice in golang
-	var result = make([]string,1000)
+	// Close closes the Rows, preventing further enumeration. If Next returns false, the Rows are closed automatically
+	defer response.Close()
 
-	st, err := db.Prepare("SELECT * FROM news WHERE id= ? ")
-	if err != nil{
-		fmt.Print( err );
-	}
-	rows, err := st.Query()
-	if err != nil {
-		fmt.Print( err )
-	}
-	i := 0
-	for rows.Next() {
-		var id int
-		var createdAt time.Time
-		var title string
-		var body string
-		err = rows.Scan( &id, &createdAt, &title, &body )
-		new := news{Id:id, CreatedAt:createdAt, Title:title, Body:body}
-		b, err := json.Marshal(new)
+	// will loop through response and store values news' values in n
+	for response.Next() {
+		err = response.Scan( &n.Id, &n.CreatedAt, &n.Title, &n.Body )
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		result[i] = fmt.Sprintf("%s", string(b))
-		i++
+		log.Print(n)
 	}
-	result = result[:i]
-
-	json, err := json.Marshal(result)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Send the text diagnostics to the client.
-	fmt.Fprintf(res,"%v",string(json))
-	//fmt.Fprintf(response, " request.URL.Path   '%v'\n", request.Method)
-	db.Close()
 }
 
 func PostNews(res http.ResponseWriter, req *http.Request){
+	//set mime type to JSON
+	res.Header().Set("Content-type", "application/json")
+
 	fmt.Println("GET POST")
 	err := req.ParseForm()
 	if err != nil {
@@ -146,18 +129,16 @@ func PostNews(res http.ResponseWriter, req *http.Request){
 		return
 	}
 	var n news
-	er := json.NewDecoder(req.Body).Decode(&n)
-	if er != nil {
+	err = json.NewDecoder(req.Body).Decode(&n)
+	if err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
 	}
 	n.CreatedAt = time.Now()
 	//send request to database
-	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB")
-	if( e != nil){
-		fmt.Print(e)
+	db, err := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
+	if( err != nil){
+		fmt.Print(err)
 	}
-	//set mime type to JSON
-	res.Header().Set("Content-type", "application/json")
 
 	st, err := db.Prepare("INSERT INTO news(createdAt, title, body) VALUES(?, ?, ?)")
 	if err != nil{
@@ -171,31 +152,46 @@ func PostNews(res http.ResponseWriter, req *http.Request){
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(lastId)
-
-
+	n.Id = int (lastId);
+	fmt.Println(n)
 	//validate input
-	//send request to database
-
 	//retireve results from DB. Parse to JSON to send back
 }
+
 func PutNews(res http.ResponseWriter, req *http.Request) {
 	fmt.Println("GET PUT")
 	vars := mux.Vars(req)
-	res.Write([]byte(vars["id"]))
-	err := req.ParseForm()
+
+	//gets id from url
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		fmt.Print(err)
+	}
+	err = req.ParseForm()
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	//body, err := ioutil.ReadAll(req.Body)
+	var n news
+	temp := news {}
+	err = json.NewDecoder(req.Body).Decode(&n)
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
-		return
 	}
-	//validate input
-	//validate input id matches with id
+	n.CreatedAt = time.Now()
 	//send request to database
+	db, err := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
+	if( err != nil){
+		fmt.Print(err)
+	}
+
+	err = db.QueryRow("UPDATE news SET createdAt = ?, title = ?, body = ? WHERE id = ?", n.CreatedAt, n.Title, n.Body, id).Scan(&temp.Id, &temp.CreatedAt, &temp.Title, &temp.Body)
+	if err != nil{
+		fmt.Print( err );
+	}
+
+	fmt.Println(temp)
+	//validate input
 
 	//retrieve results from DB. Parse to JSON to send back
 }
@@ -203,8 +199,30 @@ func PutNews(res http.ResponseWriter, req *http.Request) {
 func DeleteNews(res http.ResponseWriter, req *http.Request) {
 	fmt.Println("GET DELETE")
 	vars := mux.Vars(req)
-	res.Write([]byte(vars["id"]))
-	//send request to database
+
+	//gets id from url
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		fmt.Print(err)
+	}
+	db, err := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
+	if( err != nil){
+		fmt.Print(err)
+	}
+
+	st, err := db.Prepare("DELETE FROM news WHERE id = ?")
+	if err != nil{
+		fmt.Print( err );
+	}
+	exe, err := st.Exec(id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	lastId, err := exe.LastInsertId()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(lastId)
 
 	//retrieve results from DB. Parse to JSON to send back
 }
