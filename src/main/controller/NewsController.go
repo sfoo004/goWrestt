@@ -10,6 +10,7 @@ import (
 	"log"
 	"time"
 	"strconv"
+	"os"
 )
 
 type news struct {
@@ -20,8 +21,8 @@ type news struct {
 }
 
 func GetAllNews(res http.ResponseWriter, req *http.Request) {
-	fmt.Println("GET ALL NEWS")
 	//send request to database
+	n := news{}
 	db, e := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
 	if( e != nil){
 		fmt.Print(e)
@@ -30,50 +31,32 @@ func GetAllNews(res http.ResponseWriter, req *http.Request) {
 	//set mime type to JSON
 	res.Header().Set("Content-type", "application/json")
 
-	err := req.ParseForm()
-	if err != nil {
-		http.Error(res, fmt.Sprintf("error parsing url %v", err), 500)
-	}
-
 	//can't define dynamic slice in golang
-	var result = make([]string,1000)
+	newsList := [] news{};
 
-	st, err := db.Prepare("SELECT * FROM news")
-	if err != nil{
-		fmt.Print( err );
-	}
-	rows, err := st.Query()
+	response, err := db.Query("SELECT * FROM news")
 	if err != nil {
 		fmt.Print( err )
 	}
-	i := 0
-	for rows.Next() {
-		var id int
-		var createdAt time.Time
-		var title string
-		var body string
-		err = rows.Scan( &id, &createdAt, &title, &body )
-		new := news{Id:id, CreatedAt:createdAt, Title:title, Body:body}
-		b, err := json.Marshal(new)
+	// Close closes the Rows, preventing further enumeration. If Next returns false, the Rows are closed automatically
+	defer response.Close()
+
+	for response.Next() {
+		err = response.Scan( &n.Id, &n.CreatedAt, &n.Title, &n.Body )
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		result[i] = fmt.Sprintf("%s", string(b))
-		i++
+		newsList = append(newsList, n)
 	}
-	result = result[:i]
 
-	json, err := json.Marshal(result)
+	err = response.Err()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
-
-	// Send the text diagnostics to the client.
-	fmt.Fprintf(res,"%v",string(json))
-	//fmt.Fprintf(response, " request.URL.Path   '%v'\n", request.Method)
-	db.Close()
+	outgoingJSON, _ := json.Marshal(newsList)
+	res.WriteHeader(http.StatusOK)
+	fmt.Fprintln(res, string(outgoingJSON))
 
 	//retrieve results from DB. Parse to JSON to send back
 }
@@ -81,16 +64,8 @@ func GetAllNews(res http.ResponseWriter, req *http.Request) {
 func GetNews(res http.ResponseWriter, req *http.Request) {
 	//set mime type to JSON
 	res.Header().Set("Content-type", "application/json")
-
-	fmt.Println("GET NEWS")
-
-	vars := mux.Vars(req)
-	var n news
-	//gets id from url
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		fmt.Print(err)
-	}
+	n := news {}
+	var id int
 
 	//send request to database
 	db, err := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
@@ -98,31 +73,33 @@ func GetNews(res http.ResponseWriter, req *http.Request) {
 		fmt.Print(err)
 	}
 
+	vars := mux.Vars(req)
+	//gets id from url
+	id, err = strconv.Atoi(vars["id"])
+	if err != nil {
+		fmt.Print(err)
+	}
+
+
 	if err != nil {
 		http.Error(res, fmt.Sprintf("error parsing url %v", err), 500)
 	}
 	// will Query the news and find it by the id
-	response, err := db.Query("SELECT * FROM news WHERE id= ? ", id)
-
-	// Close closes the Rows, preventing further enumeration. If Next returns false, the Rows are closed automatically
-	defer response.Close()
-
-	// will loop through response and store values news' values in n
-	for response.Next() {
-		err = response.Scan( &n.Id, &n.CreatedAt, &n.Title, &n.Body )
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		log.Print(n)
+	err = db.QueryRow("SELECT * FROM news WHERE id= ? ", id).Scan(&n.Id, &n.CreatedAt, &n.Title, &n.Body)
+	if err != nil{
+		fmt.Print( err );
 	}
+	outgoingJSON, _ := json.Marshal(n)
+	res.WriteHeader(http.StatusOK)
+	fmt.Fprintln(res, string(outgoingJSON))
+
+	processFile()
 }
 
 func PostNews(res http.ResponseWriter, req *http.Request){
 	//set mime type to JSON
 	res.Header().Set("Content-type", "application/json")
 
-	fmt.Println("GET POST")
 	err := req.ParseForm()
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -153,13 +130,19 @@ func PostNews(res http.ResponseWriter, req *http.Request){
 		log.Fatal(err)
 	}
 	n.Id = int (lastId);
-	fmt.Println(n)
+
+	err = db.QueryRow("SELECT * FROM news WHERE id= ? ", n.Id).Scan(&n.Id, &n.CreatedAt, &n.Title, &n.Body)
+	if err != nil{
+		fmt.Print( err );
+	}
+	outgoingJSON, _ := json.Marshal(n)
+	res.WriteHeader(http.StatusCreated)
+	fmt.Fprintln(res, string(outgoingJSON))
 	//validate input
 	//retireve results from DB. Parse to JSON to send back
 }
 
 func PutNews(res http.ResponseWriter, req *http.Request) {
-	fmt.Println("GET PUT")
 	vars := mux.Vars(req)
 
 	//gets id from url
@@ -172,8 +155,7 @@ func PutNews(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var n news
-	temp := news {}
+	n := news {}
 	err = json.NewDecoder(req.Body).Decode(&n)
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -185,19 +167,27 @@ func PutNews(res http.ResponseWriter, req *http.Request) {
 		fmt.Print(err)
 	}
 
-	err = db.QueryRow("UPDATE news SET createdAt = ?, title = ?, body = ? WHERE id = ?", n.CreatedAt, n.Title, n.Body, id).Scan(&temp.Id, &temp.CreatedAt, &temp.Title, &temp.Body)
+	st, err := db.Prepare("UPDATE news SET createdAt = ?, title = ?, body = ? WHERE id = ?")
 	if err != nil{
 		fmt.Print( err );
 	}
-
-	fmt.Println(temp)
+	_, err = st.Exec( n.CreatedAt, n.Title, n.Body, id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = db.QueryRow("SELECT * FROM news WHERE id= ? ", id).Scan(&n.Id ,&n.CreatedAt, &n.Title, &n.Body)
+	if err != nil{
+		fmt.Print( err );
+	}
+	outgoingJSON, _ := json.Marshal(n)
+	res.WriteHeader(http.StatusOK)
+	fmt.Fprintln(res, string(outgoingJSON))
 	//validate input
 
 	//retrieve results from DB. Parse to JSON to send back
 }
 
 func DeleteNews(res http.ResponseWriter, req *http.Request) {
-	fmt.Println("GET DELETE")
 	vars := mux.Vars(req)
 
 	//gets id from url
@@ -222,7 +212,58 @@ func DeleteNews(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	res.WriteHeader(http.StatusOK)
 	fmt.Println(lastId)
 
 	//retrieve results from DB. Parse to JSON to send back
 }
+
+func processFile(){
+	dir, err := os.Getwd()
+	if(err != nil){
+
+	}
+	log.Print(dir)
+	err = os.MkdirAll(dir + "/uploads/images", 777)
+
+}
+
+///**
+//     * Processes an uploaded file and returns its FQDN path
+//     *
+//     * @param  UploadedFile $file
+//     * @return string       $fileFqdn
+//     */
+//protected function processFileUpload(UploadedFile $file)
+//{
+//$currentUserId = $this->get('security.token_storage')
+//->getToken()
+//->getUser()
+//->getId();
+//
+//// Prepare file destination directory path
+//$appRootDir = str_replace('/app', '', $this->get('kernel')->getRootDir());
+//$uploadsDir = str_replace('{id}', $currentUserId, $this->container->getParameter('learning_object_bundle.user.uploads.directory'));
+//$destDir = $appRootDir.$uploadsDir;
+//
+//// Create destination directory if it does not exist
+//if (!is_dir($destDir)) {
+//mkdir($destDir, 0775, true);
+//}
+//
+//// Get randomized file name
+//$fileExtension = !$file->guessExtension() ? 'bin' : $file->guessExtension();
+//$filename = sha1(uniqid(mt_rand(), true)).'.'.$fileExtension;
+//
+//// Move file to permanent location
+//$file->move($destDir, $filename);
+//
+//// Prepare FQDN web path to file
+//if (strpos($uploadsDir, '/web') === false) {
+//$fileFqdn = "FQDN is not available. File was saved in non-public directory.";
+//} else {
+//$fileFqdn = $this->getParameter('app_url').str_replace('/web', '', $uploadsDir).'/'.$filename;
+//}
+//
+//return $fileFqdn;
+//}
