@@ -11,6 +11,9 @@ import (
 	"time"
 	"strconv"
 	"os"
+	"math/rand"
+	"mime/multipart"
+	"io"
 )
 
 type news struct {
@@ -18,6 +21,7 @@ type news struct {
 	CreatedAt time.Time`json:"createdAt"`
 	Title string `json:"title"`
 	Body string `json:"body"`
+	Image http.File `json:"image"`
 }
 
 func GetAllNews(res http.ResponseWriter, req *http.Request) {
@@ -87,13 +91,11 @@ func GetNews(res http.ResponseWriter, req *http.Request) {
 	// will Query the news and find it by the id
 	err = db.QueryRow("SELECT * FROM news WHERE id= ? ", id).Scan(&n.Id, &n.CreatedAt, &n.Title, &n.Body)
 	if err != nil{
-		fmt.Print( err );
+		fmt.Print( err )
 	}
 	outgoingJSON, _ := json.Marshal(n)
 	res.WriteHeader(http.StatusOK)
 	fmt.Fprintln(res, string(outgoingJSON))
-
-	processFile()
 }
 
 func PostNews(res http.ResponseWriter, req *http.Request){
@@ -106,38 +108,47 @@ func PostNews(res http.ResponseWriter, req *http.Request){
 		return
 	}
 	var n news
-	err = json.NewDecoder(req.Body).Decode(&n)
+	//err = json.NewDecoder(req.Body).Decode(&n)
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
 	}
 	n.CreatedAt = time.Now()
 	//send request to database
-	db, err := sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
+	_, err = sql.Open("mysql", "root:root@tcp(localhost:3306)/news_DB?parseTime=true")
 	if( err != nil){
 		fmt.Print(err)
 	}
+	// the FormFile function takes in the POST input id file
+	file, _, err := req.FormFile("file")
 
-	st, err := db.Prepare("INSERT INTO news(createdAt, title, body) VALUES(?, ?, ?)")
-	if err != nil{
-		fmt.Print( err );
-	}
-	exe, err := st.Exec(n.CreatedAt, n.Title, n.Body)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(res, err)
+		return
 	}
-	lastId, err := exe.LastInsertId()
-	if err != nil {
-		log.Fatal(err)
-	}
-	n.Id = int (lastId);
+	defer file.Close()
+	processFile(file)
 
-	err = db.QueryRow("SELECT * FROM news WHERE id= ? ", n.Id).Scan(&n.Id, &n.CreatedAt, &n.Title, &n.Body)
-	if err != nil{
-		fmt.Print( err );
-	}
-	outgoingJSON, _ := json.Marshal(n)
-	res.WriteHeader(http.StatusCreated)
-	fmt.Fprintln(res, string(outgoingJSON))
+	//st, err := db.Prepare("INSERT INTO news(createdAt, title, body) VALUES(?, ?, ?)")
+	//if err != nil{
+	//	fmt.Print( err )
+	//}
+	//exe, err := st.Exec(n.CreatedAt, n.Title, n.Body)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//lastId, err := exe.LastInsertId()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//n.Id = int (lastId)
+	//
+	//err = db.QueryRow("SELECT * FROM news WHERE id= ? ", n.Id).Scan(&n.Id, &n.CreatedAt, &n.Title, &n.Body)
+	//if err != nil{
+	//	fmt.Print( err )
+	//}
+	//outgoingJSON, _ := json.Marshal(n)
+	//res.WriteHeader(http.StatusCreated)
+	//fmt.Fprintln(res, string(outgoingJSON))
 	//validate input
 	//retireve results from DB. Parse to JSON to send back
 }
@@ -177,7 +188,7 @@ func PutNews(res http.ResponseWriter, req *http.Request) {
 	}
 	err = db.QueryRow("SELECT * FROM news WHERE id= ? ", id).Scan(&n.Id ,&n.CreatedAt, &n.Title, &n.Body)
 	if err != nil{
-		fmt.Print( err );
+		fmt.Print( err )
 	}
 	outgoingJSON, _ := json.Marshal(n)
 	res.WriteHeader(http.StatusOK)
@@ -218,13 +229,44 @@ func DeleteNews(res http.ResponseWriter, req *http.Request) {
 	//retrieve results from DB. Parse to JSON to send back
 }
 
-func processFile(){
+func processFile(file multipart.File){
+	log.Print(file)
 	dir, err := os.Getwd()
 	if(err != nil){
 
 	}
 	log.Print(dir)
-	err = os.MkdirAll(dir + "/uploads/images", 777)
+	err = os.MkdirAll(dir + "/uploads/images", 0775)
+	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	b := make([]byte, 20)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	out, err := os.Create("/uploads/images/"+ string(b))
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	defer out.Close()
+
+	// write the content from POST to the file
+	_, err = io.Copy(out, file)
+	if err != nil {
+		log.Print(err)
+	}
+
+	log.Print("File uploaded successfully : ")
+		//log.Print(string(b))
+	//fi, err := file.Stat()
+	//if(err != nil){
+	//	log.Print("ERROR")
+	//}
+	//log.Print(fi.Size())
+	//log.Print(fi.Name())
+	//os.Rename(fi.Name(), dir + "/uploads/images/"+ string(b))
+
 
 }
 
