@@ -118,15 +118,52 @@ func PostNews(res http.ResponseWriter, req *http.Request){
 	if( err != nil){
 		fmt.Print(err)
 	}
-	// the FormFile function takes in the POST input id file
-	file, _, err := req.FormFile("file")
+
+	reader, err := req.MultipartReader()
+	log.Print(req.Header)
 
 	if err != nil {
-		fmt.Fprintln(res, err)
+		http.Error(res, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer file.Close()
-	processFile(file)
+
+	//copy each part to destination.
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+
+		//if part.FileName() is empty, skip this iteration.
+		if part.FileName() == "" {
+			continue
+		}
+		dst, err := os.Create("/uploads/images/" + part.FileName())
+		defer dst.Close()
+
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := io.Copy(dst, part); err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		log.Print("YAY")
+	}
+
+	//display success message.
+	//// the FormFile function takes in the POST input id file
+	//file, _, err := req.FormFile("file")
+	//
+	//if err != nil {
+	//	fmt.Fprintln(res, err)
+	//	return
+	//}
+	//defer file.Close()
+	//processFile(file)
 
 	//st, err := db.Prepare("INSERT INTO news(createdAt, title, body) VALUES(?, ?, ?)")
 	//if err != nil{
